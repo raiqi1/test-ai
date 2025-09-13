@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Location Assistant - Mapbox Powered</title>
+    
+    <!-- Mapbox GL JS -->
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .mapboxgl-popup-content {
+            border-radius: 12px !important;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .chat-bubble {
+            animation: slideUp 0.3s ease-out;
+        }
+        
+        .location-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .location-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        
+        .pulse-dot {
+            background: #3b82f6;
+            border-radius: 50%;
+            height: 20px;
+            width: 20px;
+            position: relative;
+        }
+        
+        .pulse-dot::before {
+            content: '';
+            position: absolute;
+            border-radius: 50%;
+            height: 100%;
+            width: 100%;
+            background: inherit;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+        
+        /* Dark mode styles */
+        .dark {
+            background-color: #111827;
+            color: #f9fafb;
+        }
+        
+        .dark .bg-white {
+            background-color: #1f2937;
+        }
+        
+        .dark .text-gray-900 {
+            color: #f9fafb;
+        }
+        
+        .dark .text-gray-700 {
+            color: #d1d5db;
+        }
+        
+        .dark .text-gray-500 {
+            color: #9ca3af;
+        }
+        
+        .dark .border-gray-200 {
+            border-color: #374151;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 transition-colors duration-300">
+    <!-- Header -->
+    <header class="gradient-bg text-white py-6">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-white bg-opacity-20 p-3 rounded-lg">
+                        <i class="fas fa-map-marker-alt text-2xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold">AI Location Assistant</h1>
+                        <p class="text-blue-100">Powered by Mapbox & OpenAI</p>
+                    </div>
+                </div>
+                <button id="darkModeToggle" class="glass-effect p-3 rounded-lg hover:bg-opacity-20 transition-all">
+                    <i class="fas fa-moon text-xl"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <div class="grid lg:grid-cols-2 gap-8">
+            <!-- Left Panel - Search & Results -->
+            <div class="space-y-6">
+                <!-- Search Form -->
+                <div class="bg-white rounded-2xl shadow-lg p-6 border">
+                    <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-search mr-3 text-blue-500"></i>
+                        Cari Lokasi
+                    </h2>
+                    
+                    <form id="searchForm" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">
+                                Apa yang ingin Anda cari?
+                            </label>
+                            <div class="relative">
+                                <input
+                                    type="text"
+                                    id="queryInput"
+                                    class="w-full px-4 py-3 pl-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                    placeholder="Contoh: KFC terdekat, tempat makan, kolam renang..."
+                                    required
+                                >
+                                <i class="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            </div>
+                        </div>
+                        
+                        <div class="grid md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Area Pencarian
+                                </label>
+                                <select id="locationSelect" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    <option value="auto">📍 Lokasi Saat Ini</option>
+                                    <option value="Jakarta, Indonesia">🏢 Jakarta</option>
+                                    <option value="Surabaya, Indonesia">🏭 Surabaya</option>
+                                    <option value="Bandung, Indonesia">🏔️ Bandung</option>
+                                    <option value="Medan, Indonesia">🌴 Medan</option>
+                                    <option value="Bali, Indonesia">🏖️ Bali</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Radius (km)
+                                </label>
+                                <select id="radiusSelect" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    <option value="1000">1 km</option>
+                                    <option value="2000">2 km</option>
+                                    <option value="5000" selected>5 km</option>
+                                    <option value="10000">10 km</option>
+                                    <option value="20000">20 km</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <button
+                            type="submit"
+                            id="searchButton"
+                            class="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-6 rounded-xl font-medium hover:from-blue-600 hover:to-purple-700 transition-all transform hover:scale-105 flex items-center justify-center space-x-2"
+                        >
+                            <i class="fas fa-search"></i>
+                            <span>Cari Sekarang</span>
+                        </button>
+                    </form>
+                    
+                    <!-- GPS Status -->
+                    <div id="gpsStatus" class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg hidden">
+                        <div class="flex items-center space-x-2">
+                            <div class="pulse-dot"></div>
+                            <span class="text-sm text-blue-700">Mencari lokasi GPS Anda...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Response -->
+                <div id="aiResponse" class="bg-white rounded-2xl shadow-lg p-6 border hidden">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-robot mr-3 text-purple-500"></i>
+                        AI Assistant
+                    </h3>
+                    <div id="aiResponseContent" class="prose prose-blue max-w-none">
+                        <!-- AI response will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Search Results -->
+                <div id="searchResults" class="hidden">
+                    <h3 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-map-marker-alt mr-3 text-green-500"></i>
+                        <span id="resultsCount">Hasil Pencarian</span>
+                    </h3>
+                    <div id="locationList" class="space-y-4">
+                        <!-- Location cards will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Loading -->
+                <div id="loadingIndicator" class="bg-white rounded-2xl shadow-lg p-8 border hidden">
+                    <div class="text-center">
+                        <div class="loading-spinner border-4 border-blue-200 border-t-blue-500 rounded-full w-12 h-12 mx-auto mb-4"></div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-2">Mencari lokasi untuk Anda...</h3>
+                        <p class="text-gray-600">Menggunakan AI dan data Mapbox yang akurat</p>
+                    </div>
+                </div>
+
+                <!-- Error Message -->
+                <div id="errorMessage" class="bg-red-50 border border-red-200 rounded-2xl p-6 hidden">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-exclamation-triangle text-red-500 text-xl"></i>
+                        <div>
+                            <h3 class="text-lg font-semibold text-red-800">Terjadi Kesalahan</h3>
+                            <p class="text-red-600" id="errorText">Silakan coba lagi dalam beberapa saat.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Map -->
+            <div class="lg:sticky lg:top-8">
+                <div class="bg-white rounded-2xl shadow-lg border overflow-hidden">
+                    <div class="p-4 bg-gray-50 border-b">
+                        <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                            <i class="fas fa-map mr-3 text-blue-500"></i>
+                            Peta Interaktif
+                        </h3>
+                        <p class="text-gray-600 text-sm mt-1">Klik marker untuk melihat detail lokasi</p>
+                    </div>
+                    <div id="map" class="h-96 lg:h-screen lg:max-h-[600px]"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-white py-8 mt-16">
+        <div class="container mx-auto px-4 text-center">
+            <div class="flex items-center justify-center space-x-4 mb-4">
+                <i class="fas fa-robot text-2xl text-blue-400"></i>
+                <span class="text-xl font-semibold">AI Location Assistant</span>
+            </div>
+            <p class="text-gray-400">
+                Powered by <strong>Mapbox</strong> for accurate maps & 
+                <strong>OpenAI</strong> for intelligent search
+            </p>
+            <div class="mt-4 space-x-6">
+                <span class="text-sm text-gray-500">
+                    <i class="fas fa-shield-alt mr-1"></i>
+                    Data Aman & Privat
+                </span>
+                <span class="text-sm text-gray-500">
+                    <i class="fas fa-bolt mr-1"></i>
+                    Real-time Search
+                </span>
+                <span class="text-sm text-gray-500">
+                    <i class="fas fa-mobile-alt mr-1"></i>
+                    Mobile Friendly
+                </span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Global variables
+        let map;
+        let markers = [];
+        let userLocation = null;
+        const MAPBOX_TOKEN = 'pk.eyJ1IjoicmFpcWkiLCJhIjoiY21maHB4a2F0MGU4cjJrb3Nhd2JudG9kZyJ9.6aY8SPy1OfBB6qKF49YR2A';
+        
+        // Initialize map
+        function initMap() {
+            mapboxgl.accessToken = MAPBOX_TOKEN;
+            
+            map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/streets-v12',
+                center: [106.8456, -6.2088], // Jakarta
+                zoom: 11,
+                attributionControl: false
+            });
+            
+            map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+            map.addControl(new mapboxgl.AttributionControl(), 'bottom-left');
+            
+            // Add geolocate control
+            const geolocate = new mapboxgl.GeolocateControl({
+                positionOptions: {
+                    enableHighAccuracy: true
+                },
+                trackUserLocation: true,
+                showUserHeading: true
+            });
+            
+            map.addControl(geolocate, 'top-right');
+            
+            // Handle geolocation
+            geolocate.on('geolocate', (e) => {
+                userLocation = {
+                    lat: e.coords.latitude,
+                    lng: e.coords.longitude
+                };
+                console.log('User location detected:', userLocation);
+            });
+        }
+
+        // Get user location
+        function getCurrentLocation() {
+            return new Promise((resolve, reject) => {
+                if (userLocation) {
+                    resolve(userLocation);
+                    return;
+                }
+                
+                if (!navigator.geolocation) {
+                    reject(new Error('Geolocation tidak didukung oleh browser ini'));
+                    return;
+                }
+                
+                document.getElementById('gpsStatus').classList.remove('hidden');
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        document.getElementById('gpsStatus').classList.add('hidden');
+                        resolve(userLocation);
+                    },
+                    (error) => {
+                        document.getElementById('gpsStatus').classList.add('hidden');
+                        let errorMessage;
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage = "Akses lokasi ditolak. Silakan aktifkan GPS atau pilih area pencarian manual.";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage = "Informasi lokasi tidak tersedia.";
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage = "Waktu pencarian lokasi habis.";
+                                break;
+                            default:
+                                errorMessage = "Terjadi kesalahan saat mencari lokasi.";
+                        }
+                        reject(new Error(errorMessage));
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 300000 // 5 minutes
+                    }
+                );
+            });
+        }
+
+        // Clear previous results
+        function clearResults() {
+            document.getElementById('searchResults').classList.add('hidden');
+            document.getElementById('aiResponse').classList.add('hidden');
+            document.getElementById('errorMessage').classList.add('hidden');
+            
+            // Clear map markers
+            markers.forEach(marker => marker.remove());
+            markers = [];
+        }
+
+        // Add marker to map
+        function addMarker(location, isUser = false) {
+            const markerColor = isUser ? '#ef4444' : '#3b82f6';
+            const markerElement = document.createElement('div');
+            markerElement.className = 'marker';
+            markerElement.style.cssText = `
+                background-color: ${markerColor};
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                border: 3px solid white;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+                cursor: pointer;
+            `;
+
+            const marker = new mapboxgl.Marker(markerElement)
+                .setLngLat([location.lng, location.lat])
+                .addTo(map);
+
+            if (!isUser) {
+                // Add popup for location markers
+                const popup = new mapboxgl.Popup({
+                    offset: 25,
+                    closeButton: true,
+                    closeOnClick: false
+                }).setHTML(`
+                    <div class="p-3 max-w-xs">
+                        <h3 class="font-semibold text-gray-900 mb-2">${location.name}</h3>
+                        <p class="text-sm text-gray-600 mb-2">${location.address}</p>
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>${location.category}</span>
+                            <span>${location.distance} km</span>
+                        </div>
+                        ${location.phone ? `<p class="text-xs text-blue-600 mt-1"><i class="fas fa-phone mr-1"></i>${location.phone}</p>` : ''}
+                        ${location.website ? `<a href="${location.website}" target="_blank" class="text-xs text-blue-600 hover:underline mt-1 block"><i class="fas fa-link mr-1"></i>Website</a>` : ''}
+                    </div>
+                `);
+                
+                marker.setPopup(popup);
+            }
+
+            markers.push(marker);
+            return marker;
+        }
+
+        // Create location card
+        function createLocationCard(location, index) {
+            const card = document.createElement('div');
+            card.className = 'location-card bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg';
+            
+            const distanceText = location.distance ? `${location.distance} km` : 'Jarak tidak diketahui';
+            
+            card.innerHTML = `
+                <div class="flex items-start space-x-4">
+                    <div class="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
+                        ${index + 1}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-semibold text-gray-900 mb-1 truncate">${location.name}</h3>
+                        <p class="text-sm text-gray-600 mb-2 line-clamp-2">${location.address}</p>
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-4 text-xs text-gray-500">
+                                <span class="flex items-center">
+                                    <i class="fas fa-map-marker-alt mr-1"></i>
+                                    ${distanceText}
+                                </span>
+                                <span class="flex items-center">
+                                    <i class="fas fa-tag mr-1"></i>
+                                    ${location.category}
+                                </span>
+                            </div>
+                            <button class="show-on-map-btn text-blue-500 hover:text-blue-700 text-sm font-medium" data-lat="${location.lat}" data-lng="${location.lng}">
+                                <i class="fas fa-eye mr-1"></i>
+                                Lihat
+                            </button>
+                        </div>
+                        ${location.phone ? `
+                        <div class="mt-2 flex items-center space-x-4 text-xs">
+                            <a href="tel:${location.phone}" class="text-green-600 hover:text-green-800">
+                                <i class="fas fa-phone mr-1"></i>
+                                ${location.phone}
+                            </a>
+                            ${location.website ? `
+                            <a href="${location.website}" target="_blank" class="text-blue-600 hover:text-blue-800">
+                                <i class="fas fa-link mr-1"></i>
+                                Website
+                            </a>
+                            ` : ''}
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            
+            // Add click event to show location on map
+            const showOnMapBtn = card.querySelector('.show-on-map-btn');
+            showOnMapBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const lat = parseFloat(showOnMapBtn.dataset.lat);
+                const lng = parseFloat(showOnMapBtn.dataset.lng);
+                
+                // Center map on location
+                map.flyTo({
+                    center: [lng, lat],
+                    zoom: 15,
+                    duration: 1000
+                });
+                
+                // Show popup for the corresponding marker
+                const marker = markers.find(m => {
+                    const lngLat = m.getLngLat();
+                    return Math.abs(lngLat.lat - lat) < 0.0001 && Math.abs(lngLat.lng - lng) < 0.0001;
+                });
+                
+                if (marker && marker.getPopup()) {
+                    marker.togglePopup();
+                }
+            });
+            
+            return card;
+        }
+
+        // Display search results
+        function displayResults(data) {
+            const { response, locations, map_center, total_found } = data;
+            
+            // Show AI response
+            if (response) {
+                document.getElementById('aiResponse').classList.remove('hidden');
+                document.getElementById('aiResponseContent').innerHTML = `<p class="text-gray-700 leading-relaxed">${response}</p>`;
+            }
+            
+            // Show search results
+            if (locations && locations.length > 0) {
+                document.getElementById('searchResults').classList.remove('hidden');
+                document.getElementById('resultsCount').textContent = `${total_found} Lokasi Ditemukan`;
+                
+                const locationList = document.getElementById('locationList');
+                locationList.innerHTML = '';
+                
+                // Add location cards
+                locations.forEach((location, index) => {
+                    const card = createLocationCard(location, index);
+                    locationList.appendChild(card);
+                });
+                
+                // Center map on results
+                if (map_center) {
+                    map.flyTo({
+                        center: [map_center.lng, map_center.lat],
+                        zoom: 12,
+                        duration: 1500
+                    });
+                }
+                
+                // Add markers for all locations
+                locations.forEach(location => {
+                    addMarker(location);
+                });
+                
+                // Add user location marker if available
+                if (userLocation) {
+                    addMarker(userLocation, true);
+                }
+                
+                // Fit map to show all markers
+                if (locations.length > 0) {
+                    const bounds = new mapboxgl.LngLatBounds();
+                    locations.forEach(location => {
+                        bounds.extend([location.lng, location.lat]);
+                    });
+                    if (userLocation) {
+                        bounds.extend([userLocation.lng, userLocation.lat]);
+                    }
+                    
+                    setTimeout(() => {
+                        map.fitBounds(bounds, {
+                            padding: 50,
+                            maxZoom: 15
+                        });
+                    }, 500);
+                }
+            } else {
+                // No results found
+                document.getElementById('searchResults').innerHTML = `
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
+                        <i class="fas fa-search text-yellow-500 text-3xl mb-3"></i>
+                        <h3 class="text-lg font-semibold text-yellow-800 mb-2">Tidak Ada Hasil</h3>
+                        <p class="text-yellow-700">Coba gunakan kata kunci yang berbeda atau perluas radius pencarian.</p>
+                    </div>
+                `;
+                document.getElementById('searchResults').classList.remove('hidden');
+            }
+        }
+
+        // Handle search
+        async function handleSearch(event) {
+            event.preventDefault();
+            
+            const query = document.getElementById('queryInput').value.trim();
+            const locationSelect = document.getElementById('locationSelect').value;
+            const radius = parseInt(document.getElementById('radiusSelect').value);
+            
+            if (!query) {
+                showError('Silakan masukkan kata kunci pencarian.');
+                return;
+            }
+            
+            clearResults();
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+            document.getElementById('searchButton').disabled = true;
+            document.getElementById('searchButton').innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Mencari...';
+            
+            try {
+                let searchData = {
+                    query: query,
+                    location: locationSelect === 'auto' ? 'Jakarta, Indonesia' : locationSelect,
+                    radius: radius
+                };
+                
+                // Get user location if auto is selected
+                if (locationSelect === 'auto') {
+                    try {
+                        const location = await getCurrentLocation();
+                        searchData.lat = location.lat;
+                        searchData.lng = location.lng;
+                        console.log('Using GPS coordinates:', location);
+                    } catch (error) {
+                        console.warn('GPS location failed, using Jakarta:', error.message);
+                        // Continue with Jakarta as fallback
+                    }
+                }
+                
+                // Make API request
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(searchData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                displayResults(data);
+                
+            } catch (error) {
+                console.error('Search error:', error);
+                showError(`Terjadi kesalahan: ${error.message}`);
+            } finally {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                document.getElementById('searchButton').disabled = false;
+                document.getElementById('searchButton').innerHTML = '<i class="fas fa-search mr-2"></i>Cari Sekarang';
+            }
+        }
+
+        // Show error message
+        function showError(message) {
+            document.getElementById('errorMessage').classList.remove('hidden');
+            document.getElementById('errorText').textContent = message;
+        }
+
+        // Dark mode toggle
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.contains('dark');
+            
+            const toggleBtn = document.getElementById('darkModeToggle');
+            toggleBtn.innerHTML = isDark ? '<i class="fas fa-sun text-xl"></i>' : '<i class="fas fa-moon text-xl"></i>';
+            
+            // Change map style
+            if (map) {
+                const style = isDark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12';
+                map.setStyle(style);
+            }
+            
+            // Save preference
+            localStorage.setItem('darkMode', isDark);
+        }
+
+        // Initialize app
+        function initApp() {
+            // Load dark mode preference
+            const savedDarkMode = localStorage.getItem('darkMode');
+            if (savedDarkMode === 'true') {
+                document.documentElement.classList.add('dark');
+                document.getElementById('darkModeToggle').innerHTML = '<i class="fas fa-sun text-xl"></i>';
+            }
+            
+            // Initialize map
+            initMap();
+            
+            // Event listeners
+            document.getElementById('searchForm').addEventListener('submit', handleSearch);
+            document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
+            
+            // Auto-detect user location on page load
+            getCurrentLocation().catch(() => {
+                console.log('Auto location detection failed, user will need to enable manually');
+            });
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
